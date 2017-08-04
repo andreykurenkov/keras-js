@@ -11,7 +11,6 @@
     </div>
   </div>
 </template>
-
 <script>
 import MainMenu from './components/MainMenu'
 import InfoPanel from './components/InfoPanel'
@@ -48,7 +47,6 @@ export default {
 @import './variables.css';
 
 body {
-  background: linear-gradient(0deg, #CCCCCC, #F0F0F0);
   color: var(--color-darkgray);
   min-height: 100vh;
   font-family: var(--font-sans-serif);

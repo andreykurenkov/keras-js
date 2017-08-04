@@ -48,33 +48,8 @@
         </div>
       </div>
     </div>
-    <div class="layer-results-container" v-if="!modelLoading">
-      <div class="bg-line"></div>
-      <div
-        v-for="(layerResult, layerIndex) in layerResultImages"
-        :key="`intermediate-result-${layerIndex}`"
-        class="layer-result"
-      >
-        <div class="layer-result-heading">
-          <span class="layer-class">{{ layerResult.layerClass }}</span>
-          <span> {{ layerDisplayConfig[layerResult.name].heading }}</span>
-        </div>
-        <div class="layer-result-canvas-container">
-          <canvas v-for="(image, index) in layerResult.images"
-            :key="`intermediate-result-${layerIndex}-${index}`"
-            :id="`intermediate-result-${layerIndex}-${index}`"
-            :width="image.width"
-            :height="image.height"
-            style="display:none;"
-          ></canvas>
-          <canvas v-for="(image, index) in layerResult.images"
-            :key="`intermediate-result-${layerIndex}-${index}-scaled`"
-            :id="`intermediate-result-${layerIndex}-${index}-scaled`"
-            :width="layerDisplayConfig[layerResult.name].scalingFactor * image.width"
-            :height="layerDisplayConfig[layerResult.name].scalingFactor * image.height"
-          ></canvas>
-        </div>
-      </div>
+    <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
+    	<div id="webgl_container"></div>
     </div>
   </div>
 </template>
@@ -83,7 +58,7 @@
 import debounce from 'lodash/debounce'
 import range from 'lodash/range'
 import * as utils from '../../utils'
-
+require('../../js/controls/myOrbitControls.js')
 const MODEL_FILEPATHS_DEV = {
   model: '/demos/data/mnist_cnn/mnist_cnn.json',
   weights: '/demos/data/mnist_cnn/mnist_cnn_weights.buf',
@@ -151,14 +126,100 @@ export default {
     this.model.ready().then(() => {
       this.modelLoading = false
       this.$nextTick(() => {
+        this.initWebgl()
         this.getIntermediateResults()
       })
     })
   },
 
   methods: {
+	initWebgl: function() {			
+		const container = document.getElementById("webgl_container");
+        
+		var scene, camera, renderer;
+		var geometry, material, mesh;
+
+		init();
+		animate();
+
+		function init() {
+
+		    scene = new THREE.Scene();
+
+		    camera = new THREE.PerspectiveCamera( 75, 0.95*container.offsetWidth / 1000, 1, 10000 );
+		    camera.position.z = 1000;
+
+		    geometry = new THREE.BoxGeometry( 200, 200, 200 );
+		    material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
+
+		    mesh = new THREE.Mesh( geometry, material );
+		    scene.add( mesh );
+
+		    renderer = new THREE.WebGLRenderer();
+		    renderer.setSize( 0.95*container.offsetWidth, 1000 );
+
+		    container.appendChild( renderer.domElement );
+		}
+
+		function animate() {
+
+		    requestAnimationFrame( animate );
+
+		    mesh.rotation.x += 0.01;
+		    mesh.rotation.y += 0.02;
+
+		    renderer.render( scene, camera );
+
+		  }
+	},
+	onWindowResize: function( e ) {/*
+		this.camera.aspect = window.innerWidth / window.innerHeight;
+		this.camera.updateProjectionMatrix();
+		this.renderer.setSize( window.innerWidth, window.innerHeight );
+		this.render();*/
+	},
+	
+	onMouseDown: function( e ) {/*
+		this.rotatingCam = true;
+		this.infobox.style.visibility = "hidden";*/
+	},
+	
+	onClick: function( e ) {
+		//console.log('click');
+	},
+	
+	onMouseUp: function( e ) {
+		//console.log('mouse up');
+		/*rotatingCam = false;	
+
+		var infobox = document.getElementById("infobox");
+		if (intersected) {
+			if (infobox.style.visibility == "visible")
+				infobox.style.visibility = "hidden";
+			else
+				infobox.style.visibility = "visible";
+			
+		} else {
+			infobox.style.visibility = "hidden";
+		}
+		updateInfoBox();
+		updateInfoBoxPos();*/
+
+	},
+
+	onMouseMove: function ( e ) {
+		/*var newWidth = window.innerWidth;
+		var newHeight = window.innerHeight;
+		var widthCoeff = originalWidth/newWidth;
+		var heightCoeff = originalHeight/newHeight;
+		mouse.x = math.round(e.clientX * widthCoeff);
+		mouse.y = math.round(e.clientY * heightCoeff);				
+
+		mousepx.x = e.clientX;
+		mousepx.y = e.clientY;*/
+		
+	},
     clear: function() {
-      this.clearIntermediateResults()
       const ctx = document.getElementById('input-canvas').getContext('2d')
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
       const ctxCenterCrop = document.getElementById('input-canvas-centercrop').getContext('2d')
@@ -266,7 +327,7 @@ export default {
       }
       this.layerResultImages = results
       setTimeout(() => {
-        this.showIntermediateResults()
+        //this.showIntermediateResults()
       }, 0)
     },
     showIntermediateResults: function() {
@@ -433,6 +494,11 @@ export default {
 
   & .layer-results-container {
     position: relative;
+    height: 1000px;
+    & #webgl_container {
+		z-index: 10;
+        display: block;
+    }
 
     & .bg-line {
       position: absolute;
@@ -481,4 +547,5 @@ export default {
     }
   }
 }
+
 </style>

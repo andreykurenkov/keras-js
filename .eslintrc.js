@@ -10,10 +10,12 @@ module.exports = {
   rules: {
     'no-console': 0,
     'no-extra-semi': 0,
-    'no-unused-vars': 0
+    'no-unused-vars': 0,
+    'no-mixed-spaces-and-tabs': 'warn'
   },
   globals: {
     KerasJS: true,
+    THREE: true,
     TEST_DATA: true,
     testGlobals: true,
     chai: true,
