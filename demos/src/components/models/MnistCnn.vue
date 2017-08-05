@@ -72,18 +72,18 @@ const MODEL_FILEPATHS_PROD = {
 const MODEL_CONFIG = { filepaths: process.env.NODE_ENV === 'production' ? MODEL_FILEPATHS_PROD : MODEL_FILEPATHS_DEV }
 
 const LAYER_DISPLAY_CONFIG = {
-  conv2d_1: { heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2 },
-  activation_1: { heading: 'ReLU', scalingFactor: 2 },
-  conv2d_2: { heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2 },
-  activation_2: { heading: 'ReLU', scalingFactor: 2 },
-  max_pooling2d_1: { heading: '2x2 pooling, 1x1 strides', scalingFactor: 2 },
-  dropout_1: { heading: 'p=0.25 (only active during training phase)', scalingFactor: 2 },
-  flatten_1: { heading: '', scalingFactor: 2 },
-  dense_1: { heading: 'output dimensions 128', scalingFactor: 4 },
-  activation_3: { heading: 'ReLU', scalingFactor: 4 },
-  dropout_2: { heading: 'p=0.5 (only active during training phase)', scalingFactor: 4 },
-  dense_2: { heading: 'output dimensions 10', scalingFactor: 8 },
-  activation_4: { heading: 'Softmax', scalingFactor: 8 }
+  conv2d_1: { type:'conv', numFilters: 32, filterSize: 3, stride: 1, heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2, z: -155},
+  activation_1: { type:'activation', heading: 'ReLU', scalingFactor: 2, z: -105 },
+  conv2d_2: { type:'conv', numFilters: 32, filterSize: 3, stride: 1, heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2, z: -55 },
+  activation_2: { type:'activation',heading: 'ReLU', scalingFactor: 2, z: -5},
+  max_pooling2d_1: { type:'pooling',filterSize:2,stride:1, heading: '2x2 pooling, 1x1 strides', scalingFactor: 2, z: 45 },
+  dropout_1: { type:'dropout', heading: 'p=0.25 (only active during training phase)', scalingFactor: 2 },
+  flatten_1: { type:'flatten', heading: '', scalingFactor: 2 , z: 95},
+  dense_1: { type:'fc', outDim: 128, heading: 'output dimensions 128', scalingFactor: 4, z: 135 },
+  activation_3: { type:'activation', heading: 'ReLU', scalingFactor: 4, z: 185 },
+  dropout_2: { type:'dropout', heading: 'p=0.5 (only active during training phase)', scalingFactor: 4 },
+  dense_2: { type:'fc', outDim: 128, heading: 'output dimensions 10', scalingFactor: 8 , z: 235 },
+  activation_4: { type:'softmax', heading: 'Softmax', scalingFactor: 8 , z: 285}
 }
 
 export default {
@@ -135,53 +135,82 @@ export default {
   methods: {
 	initWebgl: function() {			
 		const container = document.getElementById("webgl_container");
-        
-		var scene, camera, renderer;
-		var geometry, material, mesh;
+        this.container = container;
 
-		init();
+        this.originalWidth = 0.95*container.offsetWidth ;
+		this.originalHeight = 1000;
+		this.mouse = new THREE.Vector2();
+		this.mousepx = new THREE.Vector2();
+        this.rotatingCam = false;
+		this.posX = [];
+		this.posY = [];
+		this.posZ = [];
+		this.layerNum = [];
+		this.pickingData = [];
+
+		const scene = new THREE.Scene();
+        //scene.background = new THREE.Color( 0xff0000 );
+        this.scene = scene;
+
+		var light = new THREE.SpotLight( 0xffffff, 1.0 );
+		light.name = "light";
+		light.position.set( 0, 500, 2000 );
+		scene.add( light );
+		var light2 = new THREE.SpotLight( 0xffffff, 0.5);
+		light2.name = "light";
+		light2.position.set( 0, 200, -1000 );
+		scene.add( light2 );
+		var light3 = new THREE.AmbientLight( 0xffffff);
+		light3.name = "light";
+		scene.add( light3 );
+
+		const highlightBox = new THREE.Mesh(
+			new THREE.BoxGeometry( 12,12,12 ),
+			new THREE.MeshLambertMaterial( { color: 0xffff00 }
+		) );
+		highlightBox.visible = false;
+		scene.add( highlightBox );
+        this.highlightBox = highlightBox;
+
+	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 10000 );
+	    camera.position.z = 1000;
+        this.camera = camera;
+
+		const pickingScene = new THREE.Scene();
+		const pickingTexture = new THREE.WebGLRenderTarget( this.originalWidth, this.originalHeight);
+		pickingTexture.minFilter = THREE.LinearFilter;
+		pickingTexture.generateMipmaps = false;
+        this.pickingScene = pickingScene;
+        this.pickingTexture = pickingTexture;
+
+	    const renderer = new THREE.WebGLRenderer({ antialias: true});
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.sortObjects = false;
+	    renderer.setSize( this.originalWidth, this.originalHeight );
+        this.renderer = renderer;
+
+		var cameraControls = new THREE.OrbitControls( this.camera, renderer.domElement );
+		cameraControls.target.set( 0, 0, 0 );
+
+	    container.appendChild( renderer.domElement );
+		renderer.domElement.addEventListener( 'mousemove', this.onMouseMove );
+		renderer.domElement.addEventListener( 'mousedown', this.onMouseDown );
+		renderer.domElement.addEventListener( 'click', this.onClick );
+		renderer.domElement.addEventListener( 'mouseup', this.onMouseUp );
+		window.addEventListener( 'resize', this.onWindowResize, false );
 		animate();
-
-		function init() {
-
-		    scene = new THREE.Scene();
-
-		    camera = new THREE.PerspectiveCamera( 75, 0.95*container.offsetWidth / 1000, 1, 10000 );
-		    camera.position.z = 1000;
-
-		    geometry = new THREE.BoxGeometry( 200, 200, 200 );
-		    material = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe: true } );
-
-		    mesh = new THREE.Mesh( geometry, material );
-		    scene.add( mesh );
-
-		    renderer = new THREE.WebGLRenderer();
-		    renderer.setSize( 0.95*container.offsetWidth, 1000 );
-
-		    container.appendChild( renderer.domElement );
-		}
-
 		function animate() {
-
-		    requestAnimationFrame( animate );
-
-		    mesh.rotation.x += 0.01;
-		    mesh.rotation.y += 0.02;
-
-		    renderer.render( scene, camera );
-
+			requestAnimationFrame( animate );
+			renderer.render( scene, camera );
 		  }
 	},
-	onWindowResize: function( e ) {/*
-		this.camera.aspect = window.innerWidth / window.innerHeight;
-		this.camera.updateProjectionMatrix();
-		this.renderer.setSize( window.innerWidth, window.innerHeight );
-		this.render();*/
+	onWindowResize: function( e ) {
+			//render();
 	},
-	
-	onMouseDown: function( e ) {/*
+		
+	onMouseDown: function( e ) {
 		this.rotatingCam = true;
-		this.infobox.style.visibility = "hidden";*/
+		//infobox.style.visibility = "hidden";
 	},
 	
 	onClick: function( e ) {
@@ -190,9 +219,9 @@ export default {
 	
 	onMouseUp: function( e ) {
 		//console.log('mouse up');
-		/*rotatingCam = false;	
+		this.rotatingCam = false;	
 
-		var infobox = document.getElementById("infobox");
+		/*var infobox = document.getElementById("infobox");
 		if (intersected) {
 			if (infobox.style.visibility == "visible")
 				infobox.style.visibility = "hidden";
@@ -204,10 +233,9 @@ export default {
 		}
 		updateInfoBox();
 		updateInfoBoxPos();*/
-
 	},
 
-	onMouseMove: function ( e ) {
+	onMouseMove: function( e ) {
 		/*var newWidth = window.innerWidth;
 		var newHeight = window.innerHeight;
 		var widthCoeff = originalWidth/newWidth;
@@ -217,7 +245,6 @@ export default {
 
 		mousepx.x = e.clientX;
 		mousepx.y = e.clientY;*/
-		
 	},
     clear: function() {
       const ctx = document.getElementById('input-canvas').getContext('2d')
@@ -311,7 +338,7 @@ export default {
     getIntermediateResults: function() {
       let results = []
       for (let [name, layer] of this.model.modelLayersMap.entries()) {
-        if (name === 'input') continue
+        if (name === 'input' || name.startsWith('dropout')) continue
 
         const layerClass = layer.layerClass || ''
 
@@ -327,7 +354,7 @@ export default {
       }
       this.layerResultImages = results
       setTimeout(() => {
-        //this.showIntermediateResults()
+        this.drawCubes()
       }, 0)
     },
     showIntermediateResults: function() {
@@ -360,7 +387,88 @@ export default {
           ctxScaled.restore()
         })
       })
-    }
+    },
+	drawCubes: function() {
+		var weight = 1, i;
+		var geometry = new THREE.Geometry();
+		//var pickingGeometry = new THREE.Geometry();
+
+		var colors = [];
+		geometry.colors = colors;
+
+		// material
+		var material = new THREE.PointsMaterial( {
+			size: 10,
+			transparent: true,
+			opacity: 0.7,
+			vertexColors: THREE.VertexColors
+		} );
+
+
+		var matrix = new THREE.Matrix4();
+		var quaternion = new THREE.Quaternion();
+		var nPoints = 0;
+		this.layerResultImages.forEach((result, layerNum) => {
+            var images = result.images;
+        	const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor;
+        	const zPos = this.layerDisplayConfig[result.name].z;
+            const len = Math.ceil(Math.sqrt(images.length));
+        	images.forEach((image, imageNum) => {
+            	const xPos = (-len/2 + images.length%len)*image.width*10.1;
+        		const yPos = (-len/2 + Math.floor(images.length/len))*image.height*10.1;
+        		for ( var xInd = 0; xInd < image.width; xInd ++ ) {
+        			for ( var yInd = 0; yInd < image.height; yInd ++ ) {
+						var position = new THREE.Vector3();
+						position.x = xPos+(-image.width/2+xInd)*10;
+						position.y = yPos+(-image.height/2+yInd)*10;
+						position.z = zPos;
+
+						//var rotation = new THREE.Euler();
+						//rotation.x = 0;
+						//rotation.y = 0;
+						//rotation.z = 0;
+
+						//var scale = new THREE.Vector3();
+						//scale.x = 1;
+						//scale.y = 1;
+						//scale.z = 1;
+
+						// add it to the geometry
+						geometry.vertices.push(position);
+			
+						//quaternion.setFromEuler( rotation, false );
+						//matrix.compose( position, quaternion, scale );
+			
+						var v = image.data[xInd*image.width+yInd];
+						//this.applyVertexColors( geom, color.setRGB( v,v,v ) );
+                        colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
+                        nPoints++;
+					}
+				}
+			});
+		});
+		console.log(nPoints);
+		//var drawnObject = new THREE.Mesh( geometry, defaultMaterial);
+		//drawnObject.name = 'cubes';
+		var pointCloud = new THREE.Points( geometry, material );
+		this.scene.add( pointCloud );
+		//this.pickingScene.add( new THREE.Mesh( pickingGeometry, pickingMaterial ) );			
+	},
+	applyVertexColors: function ( g, c ) {
+		var count = 0;
+		g.faces.forEach( function( f ) {
+
+			var n = ( f instanceof THREE.Face3 ) ? 3 : 4;					
+			for( var j = 0; j < n; j ++ ) {
+
+				f.vertexColors[ j ] = c;
+				count++;
+			}
+
+		} );
+		//console.log('applied colors to ' + count + 'vertices');
+
+	}
   }
 }
 </script>
