@@ -50,6 +50,7 @@
     "ndarray-tile": "^1.0.3",
     "ndarray-unpack": "^1.0.0",
     "ndarray-unsqueeze": "^1.0.3",
+    "three-first-person-controls": "^0.2.1",
     "three-js": "^79.0.0",
     "weblas": "^0.9.1"
   },

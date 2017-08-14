@@ -72,6 +72,7 @@ const MODEL_FILEPATHS_PROD = {
 const MODEL_CONFIG = { filepaths: process.env.NODE_ENV === 'production' ? MODEL_FILEPATHS_PROD : MODEL_FILEPATHS_DEV }
 
 const LAYER_DISPLAY_CONFIG = {
+  input: { type:'conv', numFilters: 32, filterSize: 3, stride: 1, heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2, z: -155},
   conv2d_1: { type:'conv', numFilters: 32, filterSize: 3, stride: 1, heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2, z: -155},
   activation_1: { type:'activation', heading: 'ReLU', scalingFactor: 2, z: -105 },
   conv2d_2: { type:'conv', numFilters: 32, filterSize: 3, stride: 1, heading: '32 3x3 filters, padding valid, 1x1 strides', scalingFactor: 2, z: -55 },
@@ -152,17 +153,8 @@ export default {
         //scene.background = new THREE.Color( 0xff0000 );
         this.scene = scene;
 
-		var light = new THREE.SpotLight( 0xffffff, 1.0 );
-		light.name = "light";
-		light.position.set( 0, 500, 2000 );
-		scene.add( light );
-		var light2 = new THREE.SpotLight( 0xffffff, 0.5);
-		light2.name = "light";
-		light2.position.set( 0, 200, -1000 );
-		scene.add( light2 );
-		var light3 = new THREE.AmbientLight( 0xffffff);
-		light3.name = "light";
-		scene.add( light3 );
+		scene.fog = new THREE.Fog( 0xffffff, 1, 10000 );
+		scene.fog.color.setHSL( 0.6, 0, 1 );
 
 		const highlightBox = new THREE.Mesh(
 			new THREE.BoxGeometry( 12,12,12 ),
@@ -172,8 +164,8 @@ export default {
 		scene.add( highlightBox );
         this.highlightBox = highlightBox;
 
-	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 10000 );
-	    camera.position.z = 1000;
+	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 15000 );
+	    camera.position.z = 5000;
         this.camera = camera;
 
 		const pickingScene = new THREE.Scene();
@@ -184,6 +176,7 @@ export default {
         this.pickingTexture = pickingTexture;
 
 	    const renderer = new THREE.WebGLRenderer({ antialias: true});
+        renderer.setClearColor( 0xFFAAFF );
 		renderer.setPixelRatio( window.devicePixelRatio );
 		renderer.sortObjects = false;
 	    renderer.setSize( this.originalWidth, this.originalHeight );
@@ -191,6 +184,9 @@ export default {
 
 		var cameraControls = new THREE.OrbitControls( this.camera, renderer.domElement );
 		cameraControls.target.set( 0, 0, 0 );
+
+		var loader = new THREE.FontLoader();
+		loader.load( 'https://raw.githubusercontent.com/rollup/three-jsnext/master/examples/fonts/droid/droid_sans_bold.typeface.json',this.setFont);
 
 	    container.appendChild( renderer.domElement );
 		renderer.domElement.addEventListener( 'mousemove', this.onMouseMove );
@@ -204,6 +200,10 @@ export default {
 			renderer.render( scene, camera );
 		  }
 	},
+	setFont: function( font ) {
+		this.font = font;
+	},
+		
 	onWindowResize: function( e ) {
 			//render();
 	},
@@ -256,6 +256,9 @@ export default {
       this.output = new Float32Array(10)
       this.drawing = false
       this.strokes = []
+	  while(this.scene.children.length > 0) { 
+        this.scene.remove(this.scene.children[0]); 
+	  }
     },
     activateDraw: function(e) {
       this.drawing = true
@@ -328,8 +331,12 @@ export default {
         }
 
         this.model.predict({ input: this.input }).then(outputData => {
-          this.output = outputData.output
-          this.getIntermediateResults()
+          this.output = outputData.output;
+ 
+		  while(this.scene.children.length > 0) { 
+		    this.scene.remove(this.scene.children[0]); 
+		  }
+          this.getIntermediateResults();
         })
       },
       200,
@@ -338,57 +345,31 @@ export default {
     getIntermediateResults: function() {
       let results = []
       for (let [name, layer] of this.model.modelLayersMap.entries()) {
-        if (name === 'input' || name.startsWith('dropout')) continue
+        if (name.startsWith('dropout')) continue
 
         const layerClass = layer.layerClass || ''
 
         let images = []
-        if (layer.result && layer.result.tensor.shape.length === 3) {
-          images = utils.unroll3Dtensor(layer.result.tensor)
-        } else if (layer.result && layer.result.tensor.shape.length === 2) {
-          images = [utils.image2Dtensor(layer.result.tensor)]
-        } else if (layer.result && layer.result.tensor.shape.length === 1) {
-          images = [utils.image1Dtensor(layer.result.tensor)]
-        }
-        results.push({ name, layerClass, images })
+		if (layer.result) {
+		    if (layer.result.tensor.shape.length === 3) {
+		      images = utils.unroll3Dtensor(layer.result.tensor)
+		    } else if (layer.result.tensor.shape.length === 2) {
+		      images = [utils.image2Dtensor(layer.result.tensor)]
+		    } else if (layer.result.tensor.shape.length === 1) {
+		      images = [utils.image1Dtensor(layer.result.tensor)]
+		    }
+		    results.push({ name, layerClass, images })
+		}
       }
       this.layerResultImages = results
       setTimeout(() => {
-        this.drawCubes()
+        this.displayOutput()
       }, 0)
     },
-    showIntermediateResults: function() {
-      this.layerResultImages.forEach((result, layerNum) => {
-        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
-        result.images.forEach((image, imageNum) => {
-          const ctx = document.getElementById(`intermediate-result-${layerNum}-${imageNum}`).getContext('2d')
-          ctx.putImageData(image, 0, 0)
-          const ctxScaled = document
-            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
-            .getContext('2d')
-          ctxScaled.save()
-          ctxScaled.scale(scalingFactor, scalingFactor)
-          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
-          ctxScaled.drawImage(document.getElementById(`intermediate-result-${layerNum}-${imageNum}`), 0, 0)
-          ctxScaled.restore()
-        })
-      })
-    },
-    clearIntermediateResults: function() {
-      this.layerResultImages.forEach((result, layerNum) => {
-        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
-        result.images.forEach((image, imageNum) => {
-          const ctxScaled = document
-            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
-            .getContext('2d')
-          ctxScaled.save()
-          ctxScaled.scale(scalingFactor, scalingFactor)
-          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
-          ctxScaled.restore()
-        })
-      })
-    },
-	drawCubes: function() {
+	displayOutput: function() {
+        if(this.layerResultImages.length <= 1) {
+			return;	
+		}
 		var weight = 1, i;
 		var geometry = new THREE.Geometry();
 		//var pickingGeometry = new THREE.Geometry();
@@ -398,40 +379,59 @@ export default {
 
 		// material
 		var material = new THREE.PointsMaterial( {
-			size: 10,
-			transparent: true,
-			opacity: 0.7,
+			size: 14,
+			transparent: false,
+			opacity: 0.9,
 			vertexColors: THREE.VertexColors
 		} );
-
 
 		var matrix = new THREE.Matrix4();
 		var quaternion = new THREE.Quaternion();
 		var nPoints = 0;
+
+        var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0;
 		this.layerResultImages.forEach((result, layerNum) => {
             var images = result.images;
         	const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor;
         	const zPos = this.layerDisplayConfig[result.name].z;
-            const len = Math.ceil(Math.sqrt(images.length));
+            len = Math.ceil(Math.sqrt(images.length));
+            layerZ = -layerNum * 450;
+        	layerY =  0;
+            if(images.length==1 && images[0].height==1) {
+                fc = true;
+                spacing = 18;
+			} else {
+                fc = false;
+                spacing = 10;
+        		xPos = layerY - len/2 *images[0].width*11;
+    			yPos = layerX + len/2 *images[0].height*11;
+				var text = this.createLabel(result.name, 0, yPos+100, layerZ, 100, "white");
+				this.scene.add(text);
+			}
         	images.forEach((image, imageNum) => {
-            	const xPos = (-len/2 + images.length%len)*image.width*10.1;
-        		const yPos = (-len/2 + Math.floor(images.length/len))*image.height*10.1;
-        		for ( var xInd = 0; xInd < image.width; xInd ++ ) {
-        			for ( var yInd = 0; yInd < image.height; yInd ++ ) {
+                width = image.width;
+                height = image.height;
+                if(fc) {  
+                    len = Math.ceil(Math.sqrt(width));
+                	width = len;
+                	height = Math.ceil(width/height);
+            		xPos = layerX - len/2 * 18;
+        			yPos = layerY + len/2 * 18;
+					var text = this.createLabel(result.name, 0, yPos+100, layerZ, 30, "white");
+					this.scene.add(text);
+                } else {
+            		xPos = layerY + (-len/2 + imageNum%len)*image.width*11;
+        			yPos = layerX - (-len/2 + Math.floor(imageNum/len))*image.height*11;
+                }
+    			for ( var xInd = 0; xInd < width; xInd ++ ) {
+    				for ( var yInd = 0; yInd < height; yInd ++ ) {
+		                if(fc && (xInd*width + yInd >= image.width)) { 
+		                	break;
+		                }
 						var position = new THREE.Vector3();
-						position.x = xPos+(-image.width/2+xInd)*10;
-						position.y = yPos+(-image.height/2+yInd)*10;
-						position.z = zPos;
-
-						//var rotation = new THREE.Euler();
-						//rotation.x = 0;
-						//rotation.y = 0;
-						//rotation.z = 0;
-
-						//var scale = new THREE.Vector3();
-						//scale.x = 1;
-						//scale.y = 1;
-						//scale.z = 1;
+						position.y = yPos-xInd*spacing;
+						position.x = xPos+yInd*spacing;
+						position.z = layerZ;
 
 						// add it to the geometry
 						geometry.vertices.push(position);
@@ -439,7 +439,7 @@ export default {
 						//quaternion.setFromEuler( rotation, false );
 						//matrix.compose( position, quaternion, scale );
 			
-						var v = image.data[xInd*image.width+yInd];
+						var v = image.data[(xInd*width+yInd)*4+3];
 						//this.applyVertexColors( geom, color.setRGB( v,v,v ) );
                         colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
                         nPoints++;
@@ -454,20 +454,23 @@ export default {
 		this.scene.add( pointCloud );
 		//this.pickingScene.add( new THREE.Mesh( pickingGeometry, pickingMaterial ) );			
 	},
-	applyVertexColors: function ( g, c ) {
-		var count = 0;
-		g.faces.forEach( function( f ) {
-
-			var n = ( f instanceof THREE.Face3 ) ? 3 : 4;					
-			for( var j = 0; j < n; j ++ ) {
-
-				f.vertexColors[ j ] = c;
-				count++;
-			}
-
-		} );
-		//console.log('applied colors to ' + count + 'vertices');
-
+    createLabel: function(text, x, y, z, size, color) {
+		var materialFront = new THREE.MeshBasicMaterial( { color: color} );
+		var materialSide = new THREE.MeshBasicMaterial( { color: 0x000088 } );
+		var materialArray = [ materialFront, materialSide ];
+		var textGeom = new THREE.TextGeometry( text, 
+		{
+			size: size, height: 4, curveSegments: 3, font: this.font,
+			bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+			material: 0, extrudeMaterial: 1
+		});
+	
+		var textMaterial = new THREE.MeshFaceMaterial(materialArray);
+		var textMesh = new THREE.Mesh(textGeom, textMaterial );
+		textGeom.computeBoundingBox();
+    	textGeom.textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
+		textMesh.position.set( x-textGeom.textWidth/2, y, z );
+		return textMesh;
 	}
   }
 }
