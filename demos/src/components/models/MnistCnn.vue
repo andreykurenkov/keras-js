@@ -140,14 +140,15 @@ export default {
 
         this.originalWidth = 0.95*container.offsetWidth ;
 		this.originalHeight = 1000;
-		this.mouse = new THREE.Vector2();
-		this.mousepx = new THREE.Vector2();
         this.rotatingCam = false;
 		this.posX = [];
 		this.posY = [];
 		this.posZ = [];
 		this.layerNum = [];
-		this.pickingData = [];
+		this.points = null;
+		this.pickedPoint = null;
+		this.lines = null;
+		this.clicked = false;
 
 		const scene = new THREE.Scene();
         //scene.background = new THREE.Color( 0xff0000 );
@@ -188,18 +189,92 @@ export default {
 		var loader = new THREE.FontLoader();
 		loader.load( 'https://raw.githubusercontent.com/rollup/three-jsnext/master/examples/fonts/droid/droid_sans_bold.typeface.json',this.setFont);
 
+		this.raycaster = new THREE.Raycaster();
+		this.mouse = new THREE.Vector2();
+
 	    container.appendChild( renderer.domElement );
 		renderer.domElement.addEventListener( 'mousemove', this.onMouseMove );
 		renderer.domElement.addEventListener( 'mousedown', this.onMouseDown );
 		renderer.domElement.addEventListener( 'click', this.onClick );
 		renderer.domElement.addEventListener( 'mouseup', this.onMouseUp );
 		window.addEventListener( 'resize', this.onWindowResize, false );
-		animate();
-		function animate() {
-			requestAnimationFrame( animate );
-			renderer.render( scene, camera );
-		  }
+		this.animate();
 	},
+
+	animate: function() {
+		requestAnimationFrame( this.animate );
+		this.render();
+    },
+ 
+	render: function() {
+		if(!this.clicked){
+			this.raycaster.setFromCamera( this.mouse, this.camera );
+			if(this.points !== null){
+				var intersects = this.raycaster.intersectObject( this.points );
+				if ( intersects.length > 0 ) {
+					console.log(intersects);
+					if ( this.pickedPoint != intersects[ 0 ].index ) {
+						//attributes.size.array[ this.pickedPoint ] = 14;
+						//this.pickedPoint = intersects[ 0 ].index;
+						//attributes.size.array[ this.pickedPoint ] = 16;
+						//attributes.size.needsUpdate = true;
+					}
+				} else if ( this.pickedPoint !== null ) {
+					//attributes.size.array[ this.pickedPoint ] = 14;
+					//attributes.size.needsUpdate = true;
+					//this.pickedPoint = null;
+				}
+			}
+		}
+		this.renderer.render( this.scene, this.camera );
+	},
+
+	drawEdges: function() {
+		var lineMat = new THREE.LineBasicMaterial({
+			color: 0x0000ff,
+			transparent:true, 
+			linewidth: 2
+		});
+		var lineGeom = new THREE.Geometry();
+		lineGeom.dynamic = true;
+		var line = new THREE.Line(lineGeom, lineMat);
+		line.name = 'edges';
+		this.lines = line;
+		scene.add(line);
+	},
+
+	updateEdges: function() {
+		var r=1, g=1, b=1, rw=1, gw, bw, i, j, v, colorNum, weight;
+		var vertAdjust = 3;
+		var numChildren = scene.children.length;
+		var colors = [];
+		vertCount = 0;
+		for ( var c = 0; c<numChildren; c++) {
+			if ( scene.children[c].name == 'edges' ){
+				var object = scene.children[c];
+				object.geometry.dispose();
+
+				var lineGeom = new THREE.Geometry();
+				lineGeom.dynamic = true;						
+								
+				lineGeom.vertices.push(new THREE.Vector3(posX[ind_below], posY[ind_below]+vertAdjust, posZ[ind_below]));
+				lineGeom.vertices.push(new THREE.Vector3(posX[ind], posY[ind]-3, posZ[ind]));
+								
+				colors[ vertCount ] = new THREE.Color( rw,gw,bw );
+				vertCount++;
+				colors[ vertCount ] = new THREE.Color( rw,gw,bw );
+				vertCount++;
+			}
+		}
+		var lineMat = new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 1, linewidth: 1, vertexColors: THREE.VertexColors } );						
+		object.material = lineMat;
+		object.geometry.colors = colors;
+		object.geometry.vertices = lineGeom.vertices;
+		object.material.needsUpdate = true;
+		object.geometry.colorsNeedUpdate = true;
+		object.geometry.verticesNeedUpdate = true;
+	},
+
 	setFont: function( font ) {
 		this.font = font;
 	},
@@ -210,7 +285,7 @@ export default {
 		
 	onMouseDown: function( e ) {
 		this.rotatingCam = true;
-		//infobox.style.visibility = "hidden";
+		this.clicked = true;
 	},
 	
 	onClick: function( e ) {
@@ -220,32 +295,16 @@ export default {
 	onMouseUp: function( e ) {
 		//console.log('mouse up');
 		this.rotatingCam = false;	
-
-		/*var infobox = document.getElementById("infobox");
-		if (intersected) {
-			if (infobox.style.visibility == "visible")
-				infobox.style.visibility = "hidden";
-			else
-				infobox.style.visibility = "visible";
-			
-		} else {
-			infobox.style.visibility = "hidden";
-		}
-		updateInfoBox();
-		updateInfoBoxPos();*/
+		this.clicked = false;
+		
 	},
 
 	onMouseMove: function( e ) {
-		/*var newWidth = window.innerWidth;
-		var newHeight = window.innerHeight;
-		var widthCoeff = originalWidth/newWidth;
-		var heightCoeff = originalHeight/newHeight;
-		mouse.x = math.round(e.clientX * widthCoeff);
-		mouse.y = math.round(e.clientY * heightCoeff);				
-
-		mousepx.x = e.clientX;
-		mousepx.y = e.clientY;*/
+		event.preventDefault();
+		this.mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
+		this.mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
 	},
+
     clear: function() {
       const ctx = document.getElementById('input-canvas').getContext('2d')
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
@@ -332,10 +391,11 @@ export default {
 
         this.model.predict({ input: this.input }).then(outputData => {
           this.output = outputData.output;
- 
+
 		  while(this.scene.children.length > 0) { 
 		    this.scene.remove(this.scene.children[0]); 
 		  }
+
           this.getIntermediateResults();
         })
       },
@@ -350,6 +410,7 @@ export default {
         const layerClass = layer.layerClass || ''
 
         let images = []
+		console.log(layer)
 		if (layer.result) {
 		    if (layer.result.tensor.shape.length === 3) {
 		      images = utils.unroll3Dtensor(layer.result.tensor)
@@ -370,10 +431,8 @@ export default {
         if(this.layerResultImages.length <= 1) {
 			return;	
 		}
-		var weight = 1, i;
+		//if(this.points === null) { 
 		var geometry = new THREE.Geometry();
-		//var pickingGeometry = new THREE.Geometry();
-
 		var colors = [];
 		geometry.colors = colors;
 
@@ -385,74 +444,85 @@ export default {
 			vertexColors: THREE.VertexColors
 		} );
 
-		var matrix = new THREE.Matrix4();
-		var quaternion = new THREE.Quaternion();
+		this.pointLayers = [];
+		this.pointImages = [];
+		this.pointMap = {};
 		var nPoints = 0;
-
-        var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0;
+	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0;
 		this.layerResultImages.forEach((result, layerNum) => {
-            var images = result.images;
-        	const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor;
-        	const zPos = this.layerDisplayConfig[result.name].z;
-            len = Math.ceil(Math.sqrt(images.length));
-            layerZ = -layerNum * 450;
-        	layerY =  0;
-            if(images.length==1 && images[0].height==1) {
-                fc = true;
-                spacing = 18;
+	        var images = result.images;
+	    	const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor;
+	    	const zPos = this.layerDisplayConfig[result.name].z;
+	        len = Math.ceil(Math.sqrt(images.length));
+	        layerZ = -layerNum * 450;
+	    	layerY =  0;
+	        if(images.length==1 && images[0].height==1) {
+	            fc = true;
+	            spacing = 18;
 			} else {
-                fc = false;
-                spacing = 10;
-        		xPos = layerY - len/2 *images[0].width*11;
-    			yPos = layerX + len/2 *images[0].height*11;
+	            fc = false;
+	            spacing = 10;
+	    		xPos = layerY - len/2 *images[0].width*11;
+				yPos = layerX + len/2 *images[0].height*11;
 				var text = this.createLabel(result.name, 0, yPos+100, layerZ, 100, "white");
 				this.scene.add(text);
 			}
-        	images.forEach((image, imageNum) => {
-                width = image.width;
-                height = image.height;
-                if(fc) {  
-                    len = Math.ceil(Math.sqrt(width));
-                	width = len;
-                	height = Math.ceil(width/height);
-            		xPos = layerX - len/2 * 18;
-        			yPos = layerY + len/2 * 18;
+	    	images.forEach((image, imageNum) => {
+	            width = image.width;
+	            height = image.height;
+	            if(fc) {  
+	                len = Math.ceil(Math.sqrt(width));
+	            	width = len;
+	            	height = Math.ceil(width/height);
+	        		xPos = layerX - len/2 * 18;
+	    			yPos = layerY + len/2 * 18;
 					var text = this.createLabel(result.name, 0, yPos+100, layerZ, 30, "white");
 					this.scene.add(text);
-                } else {
-            		xPos = layerY + (-len/2 + imageNum%len)*image.width*11;
-        			yPos = layerX - (-len/2 + Math.floor(imageNum/len))*image.height*11;
-                }
-    			for ( var xInd = 0; xInd < width; xInd ++ ) {
-    				for ( var yInd = 0; yInd < height; yInd ++ ) {
-		                if(fc && (xInd*width + yInd >= image.width)) { 
-		                	break;
-		                }
+	            } else {
+	        		xPos = layerY + (-len/2 + imageNum%len)*image.width*11;
+	    			yPos = layerX - (-len/2 + Math.floor(imageNum/len))*image.height*11;
+	            }
+				for ( var xInd = 0; xInd < width; xInd ++ ) {
+					for ( var yInd = 0; yInd < height; yInd ++ ) {
+			            if(fc && (xInd*width + yInd >= image.width)) { 
+			            	break;
+			            }
 						var position = new THREE.Vector3();
 						position.y = yPos-xInd*spacing;
 						position.x = xPos+yInd*spacing;
 						position.z = layerZ;
 
+						this.pointMap[position] = nPoints;
+						this.pointLayers.push(layerNum);
+						this.pointImages.push(imageNum);
 						// add it to the geometry
 						geometry.vertices.push(position);
-			
-						//quaternion.setFromEuler( rotation, false );
-						//matrix.compose( position, quaternion, scale );
-			
+		
 						var v = image.data[(xInd*width+yInd)*4+3];
-						//this.applyVertexColors( geom, color.setRGB( v,v,v ) );
-                        colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
-                        nPoints++;
+	                    colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
+	                    nPoints++;
 					}
 				}
 			});
 		});
-		console.log(nPoints);
-		//var drawnObject = new THREE.Mesh( geometry, defaultMaterial);
-		//drawnObject.name = 'cubes';
 		var pointCloud = new THREE.Points( geometry, material );
 		this.scene.add( pointCloud );
-		//this.pickingScene.add( new THREE.Mesh( pickingGeometry, pickingMaterial ) );			
+		this.points = pointCloud;
+		/*} else {
+			var nPoints = 0;
+			this.layerResultImages.forEach((result, layerNum) => {
+		    	result.images.forEach((image, imageNum) => {
+					for ( var xInd = 0; xInd < image.width; xInd ++ ) {
+						for ( var yInd = 0; yInd < image.height; yInd ++ ) {
+							var v = image.data[(xInd*width+yInd)*4+3];
+		                    this.points.geometry.colors[nPoints].setRGB(v/255.0,v/255.0,v/255.0);
+							nPoints++;
+						}
+					}
+				});
+			});
+			this.points.geometry.colorsNeedUpdate = true;
+		}*/		
 	},
     createLabel: function(text, x, y, z, size, color) {
 		var materialFront = new THREE.MeshBasicMaterial( { color: color} );
