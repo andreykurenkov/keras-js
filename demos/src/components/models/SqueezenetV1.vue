@@ -60,6 +60,26 @@
     <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
     	<div id="webgl_container"></div>
     </div>
+    <div class="architecture-container" v-if="!modelLoading">
+      <div v-for="(row, rowIndex) in architectureDiagramRows" :key="`row-${rowIndex}`" class="layers-row">
+        <div v-for="layer in row" :key="`layer-${layer.name}`" class="layer-column">
+          <div
+            v-if="layer.className"
+            class="layer"
+            :class="{ 'has-result': layersWithResults.includes(layer.name) }"
+            :id="layer.name"
+          >
+            <div class="layer-class-name">{{ layer.className }}</div>
+            <div class="layer-details"> {{ layer.details }}</div>
+          </div>
+        </div>
+      </div>
+      <svg class="architecture-connections" width="100%" height="100%">
+        <g>
+          <path v-for="(path, pathIndex) in architectureDiagramPaths" :key="`path-${pathIndex}`" :d="path" />
+        </g>
+      </svg>
+    </div>
   </div>
 </template>
 
@@ -389,8 +409,8 @@ export default {
 	            spacing = 10;
 	    		xPos = layerY - len/2 *images[0].width;
 				yPos = layerX + len/2 *images[0].height;
-				var text = this.createLabel(result.name, -350, yPos+700, layerZ, 30, "white");
-				this.scene.add(text);
+				//var text = this.createLabel(result.name, -350, yPos+700, layerZ, 30, "white");
+				//this.scene.add(text);
 			}
 	    	images.forEach((image, imageNum) => {
 				var geom = new THREE.BoxGeometry( image.width,image.height,image.width );

@@ -23,17 +23,10 @@ const DEMO_INFO = [
     path: 'mnist-acgan',
     imagePath: 'demos/assets/mnist-acgan.png'
   },
-  { title: '50-layer Residual Network, trained on ImageNet', path: 'resnet50', imagePath: 'demos/assets/resnet50.png' },
-  { title: 'Inception v3, trained on ImageNet', path: 'inception-v3', imagePath: 'demos/assets/inception-v3.png' },
   {
     title: 'SqueezeNet v1.1, trained on ImageNet',
     path: 'squeezenet-v1.1',
     imagePath: 'demos/assets/squeezenet-v1.1.png'
-  },
-  {
-    title: 'Bidirectional LSTM for IMDB sentiment classification',
-    path: 'imdb-bidirectional-lstm',
-    imagePath: 'demos/assets/imdb-bidirectional-lstm.png'
   }
 ]
 

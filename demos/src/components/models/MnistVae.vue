@@ -50,6 +50,34 @@
     <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
     	<div id="webgl_container"></div>
     </div>
+    <div class="layer-results-container" v-if="!modelLoading">
+      <div class="bg-line"></div>
+      <div
+        v-for="(layerResult, layerIndex)  in layerResultImages"
+        :key="`intermediate-result-${layerIndex}`"
+        class="layer-result"
+      >
+        <div class="layer-result-heading">
+          <span class="layer-class">{{ layerResult.layerClass }}</span>
+          <span> {{ layerDisplayConfig[layerResult.name].heading }}</span>
+        </div>
+        <div class="layer-result-canvas-container">
+          <canvas v-for="(image, index) in layerResult.images"
+            :key="`intermediate-result-${layerIndex}-${index}`"
+            :id="`intermediate-result-${layerIndex}-${index}`"
+            :width="image.width"
+            :height="image.height"
+            style="display:none;"
+          ></canvas>
+          <canvas v-for="(image, index) in layerResult.images"
+            :key="`intermediate-result-${layerIndex}-${index}-scaled`"
+            :id="`intermediate-result-${layerIndex}-${index}-scaled`"
+            :width="layerDisplayConfig[layerResult.name].scalingFactor * image.width"
+            :height="layerDisplayConfig[layerResult.name].scalingFactor * image.height"
+          ></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -310,23 +338,10 @@ export default {
         results.push({ name, layerClass, images })
       }
       this.layerResultImages = results
-      setTimeout(() => {
+      setTimeout(() => {		
+        this.showIntermediateResults()
         this.displayOutput()
       }, 0)
-    },
-    clearIntermediateResults: function() {
-      this.layerResultImages.forEach((result, layerNum) => {
-        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
-        result.images.forEach((image, imageNum) => {
-          const ctxScaled = document
-            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
-            .getContext('2d')
-          ctxScaled.save()
-          ctxScaled.scale(scalingFactor, scalingFactor)
-          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
-          ctxScaled.restore()
-        })
-      })
     },
 	displayOutput: function() {
         if(this.layerResultImages.length <= 1) {
@@ -447,7 +462,38 @@ export default {
     	textGeom.textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
 		textMesh.position.set( x-textGeom.textWidth/2, y, z );
 		return textMesh;
-	}
+	},	
+    showIntermediateResults: function() {
+      this.layerResultImages.forEach((result, layerNum) => {
+        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
+        result.images.forEach((image, imageNum) => {
+          const ctx = document.getElementById(`intermediate-result-${layerNum}-${imageNum}`).getContext('2d')
+          ctx.putImageData(image, 0, 0)
+          const ctxScaled = document
+            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
+            .getContext('2d')
+          ctxScaled.save()
+          ctxScaled.scale(scalingFactor, scalingFactor)
+          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
+          ctxScaled.drawImage(document.getElementById(`intermediate-result-${layerNum}-${imageNum}`), 0, 0)
+          ctxScaled.restore()
+        })
+      })
+    },
+    clearIntermediateResults: function() {
+      this.layerResultImages.forEach((result, layerNum) => {
+        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
+        result.images.forEach((image, imageNum) => {
+          const ctxScaled = document
+            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
+            .getContext('2d')
+          ctxScaled.save()
+          ctxScaled.scale(scalingFactor, scalingFactor)
+          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
+          ctxScaled.restore()
+        })
+      })
+    }
   }
 }
 </script>

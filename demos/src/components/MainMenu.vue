@@ -24,7 +24,7 @@
           <span class="menu-item-subheading">MNIST</span>
         </a>
       </li>
-      <li :class="{ active: currentView === 'resnet50' }">
+     <!-- <li :class="{ active: currentView === 'resnet50' }">
         <a href="#/resnet50">
           <span class="menu-item-heading">Residual Network (50-layer)</span>
           <span class="menu-item-subheading">ImageNet</span>
@@ -35,19 +35,19 @@
           <span class="menu-item-heading">Inception v3</span>
           <span class="menu-item-subheading">ImageNet</span>
         </a>
-      </li>
+      </li>-->
       <li :class="{ active: currentView === 'squeezenet-v1.1' }">
         <a href="#/squeezenet-v1.1">
           <span class="menu-item-heading">SqueezeNet v1.1</span>
           <span class="menu-item-subheading">ImageNet</span>
         </a>
       </li>
-      <li :class="{ active: currentView === 'imdb-bidirectional-lstm' }">
+     <!-- <li :class="{ active: currentView === 'imdb-bidirectional-lstm' }">
         <a href="#/imdb-bidirectional-lstm">
           <span class="menu-item-heading">Bidirectional LSTM</span>
           <span class="menu-item-subheading">IMDB</span>
         </a>
-      </li>
+      </li>-->
     </ul>
   </aside>
 </template>

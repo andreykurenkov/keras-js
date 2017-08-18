@@ -51,6 +51,34 @@
     <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
     	<div id="webgl_container"></div>
     </div>
+    <div class="layer-results-container" v-if="!modelLoading">
+      <div class="bg-line"></div>
+      <div
+        v-for="(layerResult, layerIndex) in layerResultImages"
+        :key="`intermediate-result-${layerIndex}`"
+        class="layer-result"
+      >
+        <div class="layer-result-heading">
+          <span class="layer-class">{{ layerResult.layerClass }}</span>
+          <span> {{ layerDisplayConfig[layerResult.name].heading }}</span>
+        </div>
+        <div class="layer-result-canvas-container">
+          <canvas v-for="(image, index) in layerResult.images"
+            :key="`intermediate-result-${layerIndex}-${index}`"
+            :id="`intermediate-result-${layerIndex}-${index}`"
+            :width="image.width"
+            :height="image.height"
+            style="display:none;"
+          ></canvas>
+          <canvas v-for="(image, index) in layerResult.images"
+            :key="`intermediate-result-${layerIndex}-${index}-scaled`"
+            :id="`intermediate-result-${layerIndex}-${index}-scaled`"
+            :width="layerDisplayConfig[layerResult.name].scalingFactor * image.width"
+            :height="layerDisplayConfig[layerResult.name].scalingFactor * image.height"
+          ></canvas>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -228,54 +256,7 @@ export default {
 		this.renderer.render( this.scene, this.camera );
 	},
 
-	drawEdges: function() {
-		var lineMat = new THREE.LineBasicMaterial({
-			color: 0x0000ff,
-			transparent:true, 
-			linewidth: 2
-		});
-		var lineGeom = new THREE.Geometry();
-		lineGeom.dynamic = true;
-		var line = new THREE.Line(lineGeom, lineMat);
-		line.name = 'edges';
-		this.lines = line;
-		scene.add(line);
-	},
-
-	updateEdges: function() {
-		var r=1, g=1, b=1, rw=1, gw, bw, i, j, v, colorNum, weight;
-
-		var pointNum = this.pointMap[this.point];
-		var layerNum = this.pointLayers[pointNum];
-		var imageNum = this.pointImages[pointNum];
-		var numChildren = scene.children.length;
-		var colors = [];
-		vertCount = 0;
-		for ( var c = 0; c<numChildren; c++) {
-			if ( scene.children[c].name == 'edges' ){
-				var object = scene.children[c];
-				object.geometry.dispose();
-
-				var lineGeom = new THREE.Geometry();
-				lineGeom.dynamic = true;						
-								
-				lineGeom.vertices.push(new THREE.Vector3(posX[ind_below], posY[ind_below]+vertAdjust, posZ[ind_below]));
-				lineGeom.vertices.push(new THREE.Vector3(posX[ind], posY[ind]-3, posZ[ind]));
-								
-				colors[ vertCount ] = new THREE.Color( rw,gw,bw );
-				vertCount++;
-				colors[ vertCount ] = new THREE.Color( rw,gw,bw );
-				vertCount++;
-			}
-		}
-		var lineMat = new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 1, linewidth: 1, vertexColors: THREE.VertexColors } );						
-		object.material = lineMat;
-		object.geometry.colors = colors;
-		object.geometry.vertices = lineGeom.vertices;
-		object.material.needsUpdate = true;
-		object.geometry.colorsNeedUpdate = true;
-		object.geometry.verticesNeedUpdate = true;
-	},
+	
 
 	setFont: function( font ) {
 		this.font = font;
@@ -308,6 +289,7 @@ export default {
 	},
 
     clear: function() {
+      this.clearIntermediateResults();
       const ctx = document.getElementById('input-canvas').getContext('2d')
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
       const ctxCenterCrop = document.getElementById('input-canvas-centercrop').getContext('2d')
@@ -426,8 +408,41 @@ export default {
       }
       this.layerResultImages = results
       setTimeout(() => {
+        this.showIntermediateResults()
         this.displayOutput()
       }, 0)
+    },
+
+    showIntermediateResults: function() {
+      this.layerResultImages.forEach((result, layerNum) => {
+        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
+        result.images.forEach((image, imageNum) => {
+          const ctx = document.getElementById(`intermediate-result-${layerNum}-${imageNum}`).getContext('2d')
+          ctx.putImageData(image, 0, 0)
+          const ctxScaled = document
+            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
+            .getContext('2d')
+          ctxScaled.save()
+          ctxScaled.scale(scalingFactor, scalingFactor)
+          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
+          ctxScaled.drawImage(document.getElementById(`intermediate-result-${layerNum}-${imageNum}`), 0, 0)
+          ctxScaled.restore()
+        })
+      })
+    },
+    clearIntermediateResults: function() {
+      this.layerResultImages.forEach((result, layerNum) => {
+        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
+        result.images.forEach((image, imageNum) => {
+          const ctxScaled = document
+            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
+            .getContext('2d')
+          ctxScaled.save()
+          ctxScaled.scale(scalingFactor, scalingFactor)
+          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
+          ctxScaled.restore()
+        })
+      })
     },
 	displayOutput: function() {
         if(this.layerResultImages.length <= 1) {
