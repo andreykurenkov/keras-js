@@ -148,6 +148,7 @@ export default {
 		this.points = null;
 		this.pickedPoint = null;
 		this.lines = null;
+		this.textPivots = null;
 		this.clicked = false;
 
 		const scene = new THREE.Scene();
@@ -168,13 +169,6 @@ export default {
 	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 15000 );
 	    camera.position.z = 5000;
         this.camera = camera;
-
-		const pickingScene = new THREE.Scene();
-		const pickingTexture = new THREE.WebGLRenderTarget( this.originalWidth, this.originalHeight);
-		pickingTexture.minFilter = THREE.LinearFilter;
-		pickingTexture.generateMipmaps = false;
-        this.pickingScene = pickingScene;
-        this.pickingTexture = pickingTexture;
 
 	    const renderer = new THREE.WebGLRenderer({ antialias: true});
         renderer.setClearColor( 0xFFAAFF );
@@ -203,6 +197,11 @@ export default {
 
 	animate: function() {
 		requestAnimationFrame( this.animate );
+		if(this.textPivots !== null) {
+			this.textPivots.forEach((pivot, pivotNum) => {
+				pivot.rotation.y += 0.015;
+			});
+		}
 		this.render();
     },
  
@@ -245,7 +244,10 @@ export default {
 
 	updateEdges: function() {
 		var r=1, g=1, b=1, rw=1, gw, bw, i, j, v, colorNum, weight;
-		var vertAdjust = 3;
+
+		var pointNum = this.pointMap[this.point];
+		var layerNum = this.pointLayers[pointNum];
+		var imageNum = this.pointImages[pointNum];
 		var numChildren = scene.children.length;
 		var colors = [];
 		vertCount = 0;
@@ -448,11 +450,9 @@ export default {
 		this.pointImages = [];
 		this.pointMap = {};
 		var nPoints = 0;
-	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0;
+	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0; 
 		this.layerResultImages.forEach((result, layerNum) => {
 	        var images = result.images;
-	    	const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor;
-	    	const zPos = this.layerDisplayConfig[result.name].z;
 	        len = Math.ceil(Math.sqrt(images.length));
 	        layerZ = -layerNum * 450;
 	    	layerY =  0;
@@ -498,13 +498,21 @@ export default {
 						// add it to the geometry
 						geometry.vertices.push(position);
 		
-						var v = image.data[(xInd*width+yInd)*4+3];
+						var v = image.data[(xInd*width+yInd)*4];
+						if(fc)
+							v = image.data[(xInd*width+yInd)*4+3];
 	                    colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
 	                    nPoints++;
 					}
 				}
 			});
 		});
+		this.textPivots = [];
+		for(var i = 0 ; i<10; i++){
+			var text = this.createLabel(i.toString(), (i-4)*100, yPos+2000, layerZ+200*this.output[i], 600*this.output[i], "cyan");
+			this.scene.add(text);
+			this.textPivots.push(text);
+		}
 		var pointCloud = new THREE.Points( geometry, material );
 		this.scene.add( pointCloud );
 		this.points = pointCloud;
@@ -535,8 +543,7 @@ export default {
 			material: 0, extrudeMaterial: 1
 		});
 	
-		var textMaterial = new THREE.MeshFaceMaterial(materialArray);
-		var textMesh = new THREE.Mesh(textGeom, textMaterial );
+		var textMesh = new THREE.Mesh(textGeom, materialArray );
 		textGeom.computeBoundingBox();
     	textGeom.textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
 		textMesh.position.set( x-textGeom.textWidth/2, y, z );

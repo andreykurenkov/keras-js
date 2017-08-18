@@ -57,25 +57,8 @@
         </div>
       </div>
     </div>
-    <div class="architecture-container" v-if="!modelLoading">
-      <div v-for="(row, rowIndex) in architectureDiagramRows" :key="`row-${rowIndex}`" class="layers-row">
-        <div v-for="layer in row" :key="`layer-${layer.name}`" class="layer-column">
-          <div
-            v-if="layer.className"
-            class="layer"
-            :class="{ 'has-result': layersWithResults.includes(layer.name) }"
-            :id="layer.name"
-          >
-            <div class="layer-class-name">{{ layer.className }}</div>
-            <div class="layer-details"> {{ layer.details }}</div>
-          </div>
-        </div>
-      </div>
-      <svg class="architecture-connections" width="100%" height="100%">
-        <g>
-          <path v-for="(path, pathIndex) in architectureDiagramPaths" :key="`path-${pathIndex}`" :d="path" />
-        </g>
-      </svg>
+    <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
+    	<div id="webgl_container"></div>
     </div>
   </div>
 </template>
@@ -86,6 +69,7 @@ import ndarray from 'ndarray'
 import ops from 'ndarray-ops'
 import filter from 'lodash/filter'
 import * as utils from '../../utils'
+require('../../js/controls/myOrbitControls.js')
 import { IMAGE_URLS } from '../../data/sample-image-urls'
 import { ARCHITECTURE_DIAGRAM, ARCHITECTURE_CONNECTIONS } from '../../data/squeezenet-v1.1-arch'
 
@@ -169,42 +153,109 @@ export default {
     this.model.ready().then(() => {
       this.modelLoading = false
       this.$nextTick(() => {
-        this.drawArchitectureDiagramPaths()
+        this.initWebgl();
+        //this.getIntermediateResults();
       })
     })
   },
 
   methods: {
-    drawArchitectureDiagramPaths: function() {
-      this.architectureDiagramPaths = []
-      this.architectureConnections.forEach(conn => {
-        const containerElem = document.getElementsByClassName('architecture-container')[0]
-        const fromElem = document.getElementById(conn.from)
-        const toElem = document.getElementById(conn.to)
-        const containerElemCoords = containerElem.getBoundingClientRect()
-        const fromElemCoords = fromElem.getBoundingClientRect()
-        const toElemCoords = toElem.getBoundingClientRect()
-        const xContainer = containerElemCoords.left
-        const yContainer = containerElemCoords.top
-        const xFrom = fromElemCoords.left + fromElemCoords.width / 2 - xContainer
-        const yFrom = fromElemCoords.top + fromElemCoords.height / 2 - yContainer
-        const xTo = toElemCoords.left + toElemCoords.width / 2 - xContainer
-        const yTo = toElemCoords.top + toElemCoords.height / 2 - yContainer
 
-        let path = `M${xFrom},${yFrom} L${xTo},${yTo}`
-        if (conn.corner === 'top-right') {
-          path = `M${xFrom},${yFrom} L${xTo - 10},${yFrom} Q${xTo},${yFrom} ${xTo},${yFrom + 10} L${xTo},${yTo}`
-        } else if (conn.corner === 'bottom-left') {
-          path = `M${xFrom},${yFrom} L${xFrom},${yTo - 10} Q${xFrom},${yTo} ${xFrom + 10},${yTo} L${xTo},${yTo}`
-        } else if (conn.corner === 'top-left') {
-          path = `M${xFrom},${yFrom} L${xTo + 10},${yFrom} Q${xTo},${yFrom} ${xTo},${yFrom + 10} L${xTo},${yTo}`
-        } else if (conn.corner === 'bottom-right') {
-          path = `M${xFrom},${yFrom} L${xFrom},${yTo - 10} Q${xFrom},${yTo} ${xFrom - 10},${yTo} L${xTo},${yTo}`
-        }
+	initWebgl: function() {			
+		const container = document.getElementById("webgl_container");
+        this.container = container;
 
-        this.architectureDiagramPaths.push(path)
-      })
+        this.originalWidth = 0.95*container.offsetWidth ;
+		this.originalHeight = 1000;
+        this.rotatingCam = false;
+		this.posX = [];
+		this.posY = [];
+		this.posZ = [];
+		this.layerNum = [];
+		this.points = null;
+		this.pickedPoint = null;
+		this.lines = null;
+		this.clicked = false;
+
+		const scene = new THREE.Scene();
+        //scene.background = new THREE.Color( 0xff0000 );
+        this.scene = scene;
+
+		const highlightBox = new THREE.Mesh(
+			new THREE.BoxGeometry( 12,12,12 ),
+			new THREE.MeshLambertMaterial( { color: 0xffff00 }
+		) );
+		highlightBox.visible = false;
+		scene.add( highlightBox );
+        this.highlightBox = highlightBox;
+
+		var light3 = new THREE.AmbientLight( 0xffffff);
+		light3.name = "light";
+		scene.add( light3 );
+
+	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 50000 );
+	    camera.position.z = 5000;
+        this.camera = camera;
+
+	    const renderer = new THREE.WebGLRenderer({ antialias: true});
+        renderer.setClearColor( 0xFFAAFF );
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.sortObjects = false;
+	    renderer.setSize( this.originalWidth, this.originalHeight );
+        this.renderer = renderer;
+
+		var cameraControls = new THREE.OrbitControls( this.camera, renderer.domElement );
+		cameraControls.target.set( 0, 0, 0 );
+
+		var loader = new THREE.FontLoader();
+		loader.load( 'https://raw.githubusercontent.com/rollup/three-jsnext/master/examples/fonts/droid/droid_sans_bold.typeface.json',this.setFont);
+
+	    container.appendChild( renderer.domElement );
+		renderer.domElement.addEventListener( 'mousemove', this.onMouseMove );
+		renderer.domElement.addEventListener( 'mousedown', this.onMouseDown );
+		renderer.domElement.addEventListener( 'click', this.onClick );
+		renderer.domElement.addEventListener( 'mouseup', this.onMouseUp );
+		window.addEventListener( 'resize', this.onWindowResize, false );
+		this.animate();
+	},
+
+	animate: function() {
+		requestAnimationFrame( this.animate );
+		this.render();
     },
+ 
+	render: function() {
+		this.renderer.render( this.scene, this.camera );
+	},
+	setFont: function( font ) {
+		this.font = font;
+	},
+		
+	onWindowResize: function( e ) {
+			//render();
+	},
+		
+	onMouseDown: function( e ) {
+		this.rotatingCam = true;
+		this.clicked = true;
+	},
+	
+	onClick: function( e ) {
+		//console.log('click');
+	},
+	
+	onMouseUp: function( e ) {
+		//console.log('mouse up');
+		this.rotatingCam = false;	
+		this.clicked = false;
+		
+	},
+
+	onMouseMove: function( e ) {
+		event.preventDefault();
+	},
+
+
     onImageURLInputEnter: function(e) {
       this.imageURLSelect = null
       this.loadImageToCanvas(e.target.value)
@@ -229,6 +280,10 @@ export default {
             this.imageLoadingError = false
             this.imageLoading = false
             this.modelRunning = true
+			
+			  while(this.scene.children.length > 0) { 
+				this.scene.remove(this.scene.children[0]); 
+			  }
             // model predict
             this.$nextTick(function() {
               setTimeout(() => {
@@ -258,9 +313,37 @@ export default {
 
       const inputData = { input_1: dataProcessedTensor.data }
       this.model.predict(inputData).then(outputData => {
-        this.output = outputData['loss']
-        this.modelRunning = false
+        this.output = outputData['loss'];
+        this.modelRunning = false;
+		this.getIntermediateResults();
       })
+    },
+
+    getIntermediateResults: function() {
+      let results = []
+      for (let [name, layer] of this.model.modelLayersMap.entries()) {
+        if (name.startsWith('dropout')) continue
+
+        const layerClass = layer.layerClass || ''
+
+        let images = []
+		if (layer.result) {
+			if(name=='input_1') {
+		      images = [utils.image3Dtensor(layer.result.tensor)]
+			} else if (layer.result.tensor.shape.length === 3) {
+		      images = utils.unroll3Dtensor(layer.result.tensor)
+		    } else if (layer.result.tensor.shape.length === 2) {
+		      images = [utils.image2Dtensor(layer.result.tensor)]
+		    } else if (layer.result.tensor.shape.length === 1) {
+		      images = [utils.image1Dtensor(layer.result.tensor)]
+		    }
+		    results.push({ name, layerClass, images })
+		}
+      }
+      this.layerResultImages = results
+      setTimeout(() => {
+        this.displayOutput()
+      }, 0)
     },
     clearAll: function() {
       this.modelRunning = false
@@ -274,7 +357,111 @@ export default {
 
       const ctx = document.getElementById('input-canvas').getContext('2d')
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
-    }
+    },
+	displayOutput: function() {
+        if(this.layerResultImages.length <= 1) {
+			return;	
+		}
+		var geometry = new THREE.Geometry();
+		var matrix = new THREE.Matrix4();
+ 		var quaternion = new THREE.Quaternion();
+		var materials = [];
+	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var spacing = 0; var len = 0; var xPos = 0; var yPos = 0; 
+		this.layerResultImages.forEach((result, layerNum) => {
+			var layer =  this.architectureDiagram[layerNum];
+	        var images = result.images;
+	        len = Math.ceil(Math.sqrt(images.length));
+	        layerZ = -layer.row * 450;
+			layerY = 0;
+			if(layerNum < 650 && layerNum > 1) {
+				if(layer.row === this.architectureDiagram[layerNum+1].row){
+	    			layerY = - len/2 *images[0].width*1.5;
+				}
+				else if(this.architectureDiagram[layerNum-1].row === layer.row){
+	    			layerY = len/2 *images[0].width*1.5;
+				}
+			}
+	        if(images.length==1 && images[0].height==1) {
+	            fc = true;
+	            spacing = 18;
+			} else {
+	            fc = false;
+	            spacing = 10;
+	    		xPos = layerY - len/2 *images[0].width;
+				yPos = layerX + len/2 *images[0].height;
+				var text = this.createLabel(result.name, -350, yPos+700, layerZ, 30, "white");
+				this.scene.add(text);
+			}
+	    	images.forEach((image, imageNum) => {
+				var geom = new THREE.BoxGeometry( image.width,image.height,image.width );
+	            width = image.width;
+	            height = image.height;
+	            if(fc) {  
+	                len = Math.ceil(Math.sqrt(width));
+	            	width = len;
+	            	height = Math.ceil(width/height);
+	        		xPos = layerX - len/2 * 18;
+	    			yPos = layerY + len/2 * 18;
+					//var text = this.createLabel(result.name, -350, yPos+700, layerZ, 30, "white");
+					//this.scene.add(text);
+	            } else {
+	        		xPos = layerY + (-len/2 + imageNum%len)*image.width*1.1;
+	    			yPos = layerX - (-len/2 + Math.floor(imageNum/len))*image.height*1.1;
+	            }
+				var texture = new THREE.Texture(image);
+				texture.needsUpdate = true;
+				// material
+				var material = new THREE.MeshPhongMaterial( { map: texture } );
+				materials.push(material);
+				var position = new THREE.Vector3();
+				position.x = xPos;
+				position.y = yPos;
+				position.z = layerZ;
+
+				var rotation = new THREE.Euler();
+				rotation.x = 0;
+				rotation.y = 0;
+				rotation.z = 0;
+
+				var scale = new THREE.Vector3();
+				scale.x = 1;
+				scale.y = 1;
+				scale.z = 1;
+				
+				quaternion.setFromEuler( rotation, false );
+				matrix.compose( position, quaternion, scale );
+
+				//geometry.merge( geom, matrix, materials.length-1);
+			    var smaterial = new THREE.SpriteMaterial( { map: texture} );
+				var sprite = new THREE.Sprite( smaterial );
+				sprite.position.set( xPos,yPos,layerZ );
+				sprite.scale.set( image.width,image.height, 1.0 ); // imageWidth, imageHeight
+				this.scene.add( sprite );
+			});
+		});
+		//var drawnObject = new THREE.Mesh( geometry, materials);//new THREE.MeshFaceMaterial(materials) );
+        //drawnObject.geometry.computeFaceNormals();
+        //drawnObject.geometry.computeVertexNormals();
+		//drawnObject.name = 'cubes';
+		//this.scene.add( drawnObject );
+	},
+    createLabel: function(text, x, y, z, size, color) {
+		var materialFront = new THREE.MeshBasicMaterial( { color: color} );
+		var materialSide = new THREE.MeshBasicMaterial( { color: 0x000088 } );
+		var materialArray = [ materialFront, materialSide ];
+		var textGeom = new THREE.TextGeometry( text, 
+		{
+			size: size, height: 4, curveSegments: 3, font: this.font,
+			bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+			material: 0, extrudeMaterial: 1
+		});
+	
+		var textMesh = new THREE.Mesh(textGeom, materialArray );
+		textGeom.computeBoundingBox();
+    	textGeom.textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
+		textMesh.position.set( x-textGeom.textWidth/2, y, z );
+		return textMesh;
+	}
   }
 }
 </script>

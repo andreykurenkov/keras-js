@@ -171,13 +171,29 @@ export function unroll3Dtensor(tensor) {
   return unrolled.map(channelData => {
     let imageData = new Uint8ClampedArray(channelData.length * 4)
     for (let i = 0, len = channelData.length; i < len; i++) {
-      imageData[i * 4] = 0
-      imageData[i * 4 + 1] = 0
-      imageData[i * 4 + 2] = 0
-      imageData[i * 4 + 3] = 255 * (channelData[i] - min) / (max - min)
+      imageData[i * 4] = 255 * (channelData[i] - min) / (max - min)
+      imageData[i * 4 + 1] = 255 * (channelData[i] - min) / (max - min)
+      imageData[i * 4 + 2] = 255 * (channelData[i] - min) / (max - min)
+      imageData[i * 4 + 3] = 255
     }
     return new ImageData(imageData, shape[0], shape[1])
   })
+}
+
+export function image3Dtensor(tensor) {
+  const { min, max } = tensorMinMax(tensor)
+    let shape = tensor.shape.slice()
+	let imageData = new Uint8ClampedArray(shape[0]*shape[1]* 4)
+
+	for (let x = 0; x<shape[0]; x++) {
+		for (let y = 0; y<shape[1]; y++) {
+		  imageData[(x*shape[0]+y) * 4] = 255 * (tensor.pick(x, y, 2) - min) / (max - min)
+		  imageData[(x*shape[0]+y) * 4 + 1] = 255 * (tensor.pick(x, y, 1) - min) / (max - min)
+		  imageData[(x*shape[0]+y) * 4 + 2] = 255 * (tensor.pick(x, y, 0) - min) / (max - min)
+		  imageData[(x*shape[0]+y) * 4 + 3] = 255
+		}
+	}
+	return new ImageData(imageData, shape[0], shape[1])
 }
 
 /**

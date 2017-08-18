@@ -33,20 +33,8 @@
         <mdl-switch v-model="useGpu" :disabled="modelLoading || !hasWebgl">use GPU</mdl-switch>
       </div>
     </div>
-    <div class="architecture-container" v-if="!modelLoading">
-      <div v-for="(row, rowIndex) in architectureDiagramRows" :key="`row-${rowIndex}`" class="layers-row">
-        <div v-for="layer in row" :key="`layer-${layer.name}`" class="layer-column">
-          <div v-if="layer.className" class="layer" :id="layer.name">
-            <div class="layer-class-name">{{ layer.className }}</div>
-            <div class="layer-details"> {{ layer.details }}</div>
-          </div>
-        </div>
-      </div>
-      <svg class="architecture-connections" width="100%" height="100%">
-        <g>
-          <path v-for="(path, pathIndex) in architectureDiagramPaths" :key="`path-${pathIndex}`" :d="path" />
-        </g>
-      </svg>
+    <div class="layer-results-container"  v-if="!modelLoading" id="results-container">
+    	<div id="webgl_container"></div>
     </div>
   </div>
 </template>
@@ -112,7 +100,7 @@ export default {
     this.model.ready().then(() => {
       this.modelLoading = false
       this.$nextTick(() => {
-        this.drawArchitectureDiagramPaths()
+        this.initWebgl()
         this.runModel()
         this.drawNoise()
       })
@@ -120,38 +108,101 @@ export default {
   },
 
   methods: {
-    drawArchitectureDiagramPaths: function() {
-      this.architectureDiagramPaths = []
-      this.$nextTick(() => {
-        this.architectureConnections.forEach(conn => {
-          const containerElem = document.getElementsByClassName('architecture-container')[0]
-          const fromElem = document.getElementById(conn.from)
-          const toElem = document.getElementById(conn.to)
-          const containerElemCoords = containerElem.getBoundingClientRect()
-          const fromElemCoords = fromElem.getBoundingClientRect()
-          const toElemCoords = toElem.getBoundingClientRect()
-          const xContainer = containerElemCoords.left
-          const yContainer = containerElemCoords.top
-          const xFrom = fromElemCoords.left + fromElemCoords.width / 2 - xContainer
-          const yFrom = fromElemCoords.top + fromElemCoords.height / 2 - yContainer
-          const xTo = toElemCoords.left + toElemCoords.width / 2 - xContainer
-          const yTo = toElemCoords.top + toElemCoords.height / 2 - yContainer
+	initWebgl: function() {			
+		const container = document.getElementById("webgl_container");
+        this.container = container;
 
-          let path = `M${xFrom},${yFrom} L${xTo},${yTo}`
-          if (conn.corner === 'top-right') {
-            path = `M${xFrom},${yFrom} L${xTo - 10},${yFrom} Q${xTo},${yFrom} ${xTo},${yFrom + 10} L${xTo},${yTo}`
-          } else if (conn.corner === 'bottom-left') {
-            path = `M${xFrom},${yFrom} L${xFrom},${yTo - 10} Q${xFrom},${yTo} ${xFrom + 10},${yTo} L${xTo},${yTo}`
-          } else if (conn.corner === 'top-left') {
-            path = `M${xFrom},${yFrom} L${xTo + 10},${yFrom} Q${xTo},${yFrom} ${xTo},${yFrom + 10} L${xTo},${yTo}`
-          } else if (conn.corner === 'bottom-right') {
-            path = `M${xFrom},${yFrom} L${xFrom},${yTo - 10} Q${xFrom},${yTo} ${xFrom - 10},${yTo} L${xTo},${yTo}`
-          }
+        this.originalWidth = 0.95*container.offsetWidth ;
+		this.originalHeight = 1000;
+        this.rotatingCam = false;
+		this.posX = [];
+		this.posY = [];
+		this.posZ = [];
+		this.layerNum = [];
+		this.clicked = false;
 
-          this.architectureDiagramPaths.push(path)
-        })
-      })
+		const scene = new THREE.Scene();
+        //scene.background = new THREE.Color( 0xff0000 );
+        this.scene = scene;
+
+		scene.fog = new THREE.Fog( 0xffffff, 1, 30000 );
+		scene.fog.color.setHSL( 0.6, 0, 1 );
+
+		const highlightBox = new THREE.Mesh(
+			new THREE.BoxGeometry( 12,12,12 ),
+			new THREE.MeshLambertMaterial( { color: 0xffff00 }
+		) );
+		highlightBox.visible = false;
+		scene.add( highlightBox );
+        this.highlightBox = highlightBox;
+
+	    const camera = new THREE.PerspectiveCamera( 75, this.originalWidth / this.originalHeight, 1, 25000 );
+	    camera.position.z = 5000;
+        this.camera = camera;
+
+	    const renderer = new THREE.WebGLRenderer({ antialias: true});
+        renderer.setClearColor( 0xFFAAFF );
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.sortObjects = false;
+	    renderer.setSize( this.originalWidth, this.originalHeight );
+        this.renderer = renderer;
+
+		var cameraControls = new THREE.OrbitControls( this.camera, renderer.domElement );
+		cameraControls.target.set( 0, 0, 0 );
+
+		var loader = new THREE.FontLoader();
+		loader.load( 'https://raw.githubusercontent.com/rollup/three-jsnext/master/examples/fonts/droid/droid_sans_bold.typeface.json',this.setFont);
+
+		this.raycaster = new THREE.Raycaster();
+		this.mouse = new THREE.Vector2();
+
+	    container.appendChild( renderer.domElement );
+		renderer.domElement.addEventListener( 'mousemove', this.onMouseMove );
+		renderer.domElement.addEventListener( 'mousedown', this.onMouseDown );
+		renderer.domElement.addEventListener( 'click', this.onClick );
+		renderer.domElement.addEventListener( 'mouseup', this.onMouseUp );
+		window.addEventListener( 'resize', this.onWindowResize, false );
+		this.animate();
+	},
+
+	animate: function() {
+		requestAnimationFrame( this.animate );
+		this.render();
     },
+ 
+	render: function() {
+		this.renderer.render( this.scene, this.camera );
+	},
+
+	setFont: function( font ) {
+		this.font = font;
+	},
+		
+	onWindowResize: function( e ) {
+			//render();
+	},
+		
+	onMouseDown: function( e ) {
+		this.rotatingCam = true;
+		this.clicked = true;
+	},
+	
+	onClick: function( e ) {
+		//console.log('click');
+	},
+	
+	onMouseUp: function( e ) {
+		//console.log('mouse up');
+		this.rotatingCam = false;	
+		this.clicked = false;
+		
+	},
+
+	onMouseMove: function( e ) {
+		event.preventDefault();
+		this.mouse.x = ( e.clientX / window.innerWidth ) * 2 - 1;
+		this.mouse.y = - ( e.clientY / window.innerHeight ) * 2 + 1;
+	},
     selectDigit: function(digit) {
       this.digit = digit
       this.runModel()
@@ -173,6 +224,7 @@ export default {
       this.model.predict(inputData).then(outputData => {
         this.output = outputData['conv2d_7']
         this.drawOutput()
+        this.getIntermediateResults()
       })
     },
     drawNoise: function() {
@@ -204,7 +256,162 @@ export default {
       this.createNoise()
       this.runModel()
       this.drawNoise()
-    }
+    },
+    getIntermediateResults: function() {
+      let results = []
+      for (let [name, layer] of this.model.modelLayersMap.entries()) {
+        const layerClass = layer.layerClass || ''
+        if (layerClass === 'InputLayer') continue
+
+        let images = []
+        if (layer.result && layer.result.tensor.shape.length === 3) {
+          images = utils.unroll3Dtensor(layer.result.tensor)
+        } else if (layer.result && layer.result.tensor.shape.length === 2) {
+          images = [utils.image2Dtensor(layer.result.tensor)]
+        } else if (layer.result && layer.result.tensor.shape.length === 1) {
+          images = [utils.image1Dtensor(layer.result.tensor)]
+        }
+        results.push({ name, layerClass, images })
+      }
+      this.layerResultImages = results
+      setTimeout(() => {
+        this.displayOutput()
+      }, 0)
+    },
+    clearIntermediateResults: function() {
+      this.layerResultImages.forEach((result, layerNum) => {
+        const scalingFactor = this.layerDisplayConfig[result.name].scalingFactor
+        result.images.forEach((image, imageNum) => {
+          const ctxScaled = document
+            .getElementById(`intermediate-result-${layerNum}-${imageNum}-scaled`)
+            .getContext('2d')
+          ctxScaled.save()
+          ctxScaled.scale(scalingFactor, scalingFactor)
+          ctxScaled.clearRect(0, 0, ctxScaled.canvas.width, ctxScaled.canvas.height)
+          ctxScaled.restore()
+        })
+      })
+    },
+	displayOutput: function() {
+        if(this.layerResultImages.length <= 1) {
+			return;	
+		}
+		//if(this.points === null) { 
+		var geometry = new THREE.Geometry();
+		var colors = [];
+		geometry.colors = colors;
+
+		// material
+		var material = new THREE.PointsMaterial( {
+			size: 14,
+			transparent: false,
+			opacity: 0.9,
+			vertexColors: THREE.VertexColors
+		} );
+
+		this.pointLayers = [];
+		this.pointImages = [];
+		this.pointMap = {};
+		var nPoints = 0;
+	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var xPos = 0; var yPos = 0; var spacing = 0; var len = 0; 
+		this.layerResultImages.forEach((result, layerNum) => {
+	        var images = result.images;
+	        len = Math.ceil(Math.sqrt(images.length));
+	        layerZ = -layerNum * 1050;
+	    	layerY =  0;
+	        if(images.length==1 && images[0].height==1 || layerNum==0) {
+	            fc = true;
+	            spacing = 18;
+			} else {
+	            fc = false;
+	            spacing = 10;
+	    		xPos = layerY - len/2 *images[0].width*11;
+				yPos = layerX + len/2 *images[0].height*11;
+				var text = this.createLabel(result.name, 0, yPos+100, layerZ, 100, "white");
+				this.scene.add(text);
+			}
+	    	images.forEach((image, imageNum) => {
+	            width = image.width;
+	            height = image.height;
+	            if(fc) {  
+					if(layerNum==0) {
+			            len = Math.ceil(Math.sqrt(height));
+			        	height = len;
+			        	width = Math.ceil(height/width);
+					} else {
+			            len = Math.ceil(Math.sqrt(width));
+			        	width = len;
+			        	height = Math.ceil(width/height);
+					}
+	        		xPos = layerX - len/2 * 18;
+	    			yPos = layerY + len/2 * 18;
+					var text = this.createLabel(result.name, 0, yPos+100, layerZ, 30, "white");
+					this.scene.add(text);
+	            } else {
+	        		xPos = layerY + (-len/2 + imageNum%len)*image.width*11;
+	    			yPos = layerX - (-len/2 + Math.floor(imageNum/len))*image.height*11;
+	            }
+				for ( var xInd = 0; xInd < width; xInd ++ ) {
+					for ( var yInd = 0; yInd < height; yInd ++ ) {
+			            if(layerNum > 0 && fc && (xInd*width + yInd >= image.width) || layerNum==0 && fc && (xInd*width + yInd >= image.height)) { 
+			            	break;
+			            }
+						var position = new THREE.Vector3();
+						position.y = yPos-xInd*spacing;
+						position.x = xPos+yInd*spacing;
+						position.z = layerZ;
+
+						this.pointMap[position] = nPoints;
+						this.pointLayers.push(layerNum);
+						this.pointImages.push(imageNum);
+						// add it to the geometry
+						geometry.vertices.push(position);
+		
+						var v = image.data[(xInd*width+yInd)*4];
+						if(fc)
+							v = image.data[(xInd*width+yInd)*4+3];
+	                    colors.push(new THREE.Color( v/255.0,v/255.0,v/255.0));
+	                    nPoints++;
+					}
+				}
+			});
+		});
+		var pointCloud = new THREE.Points( geometry, material );
+		this.scene.add( pointCloud );
+		this.points = pointCloud;
+		/*} else {
+			var nPoints = 0;
+			this.layerResultImages.forEach((result, layerNum) => {
+		    	result.images.forEach((image, imageNum) => {
+					for ( var xInd = 0; xInd < image.width; xInd ++ ) {
+						for ( var yInd = 0; yInd < image.height; yInd ++ ) {
+							var v = image.data[(xInd*width+yInd)*4+3];
+		                    this.points.geometry.colors[nPoints].setRGB(v/255.0,v/255.0,v/255.0);
+							nPoints++;
+						}
+					}
+				});
+			});
+			this.points.geometry.colorsNeedUpdate = true;
+		}*/		
+	},
+    createLabel: function(text, x, y, z, size, color) {
+		var materialFront = new THREE.MeshBasicMaterial( { color: color} );
+		var materialSide = new THREE.MeshBasicMaterial( { color: 0x000088 } );
+		var materialArray = [ materialFront, materialSide ];
+		var textGeom = new THREE.TextGeometry( text, 
+		{
+			size: size, height: 4, curveSegments: 3, font: this.font,
+			bevelThickness: 1, bevelSize: 2, bevelEnabled: true,
+			material: 0, extrudeMaterial: 1
+		});
+	
+		var textMesh = new THREE.Mesh(textGeom, materialArray );
+		textGeom.computeBoundingBox();
+    	textGeom.textWidth = textGeom.boundingBox.max.x - textGeom.boundingBox.min.x;
+		textMesh.position.set( x-textGeom.textWidth/2, y, z );
+		return textMesh;
+	}
   }
 }
 </script>
