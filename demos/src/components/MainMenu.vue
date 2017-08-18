@@ -62,7 +62,7 @@
     </ul>
     <p class="menu-label">Contact</p>
     <ul class="menu-list contact">
-      <li><a href="www.andreykurenkov.com" target="_blank">Andrey Kurenkov</a></li>
+      <li><a href="http://www.andreykurenkov.com" target="_blank">Andrey Kurenkov</a></li>
       <li></li>
     </ul>
   </aside>

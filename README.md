@@ -1,4 +1,8 @@
-# [Keras.js](https://transcranial.github.io/keras-js)
+# [Keras.js](https://andreykurenkov.github.io/keras-js)
+
+A modification of the original Keras.js demos to include 3D visualizations. To setup/modify, follow instructions below. 
+
+# Original README
 
 Run [Keras](https://github.com/fchollet/keras) models (trained using Tensorflow backend) in your browser, with GPU support. Models are created directly from the Keras JSON-format configuration file, using weights serialized directly from the corresponding HDF5 file. Also works in node, but only in CPU mode.
 
