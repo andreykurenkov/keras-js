@@ -388,16 +388,17 @@ export default {
 		var materials = [];
 	    var layerX = 0; var layerY = 0; var layerZ = 0; var height = 0; var width = 0; var fc = false; var spacing = 0; var len = 0; var xPos = 0; var yPos = 0; 
 		this.layerResultImages.forEach((result, layerNum) => {
-			var layer =  this.architectureDiagram[layerNum];
 	        var images = result.images;
 	        len = Math.ceil(Math.sqrt(images.length));
-	        layerZ = -layer.row * 450;
+	        layerZ = -layerNum*450;
 			layerY = 0;
-			if(layerNum < 650 && layerNum > 1) {
-				if(layer.row === this.architectureDiagram[layerNum+1].row){
+			if(layerNum < 65 && layerNum > 1) {
+				var layer =  this.architectureDiagram[layerNum-1];
+	        	layerZ = -(layer.row+1) * 450;
+				if(layer.row === this.architectureDiagram[layerNum].row){
 	    			layerY = - len/2 *images[0].width*1.5;
 				}
-				else if(this.architectureDiagram[layerNum-1].row === layer.row){
+				else if(this.architectureDiagram[layerNum-2].row === layer.row){
 	    			layerY = len/2 *images[0].width*1.5;
 				}
 			}
