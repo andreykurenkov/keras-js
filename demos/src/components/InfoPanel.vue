@@ -1,7 +1,7 @@
 <template>
   <div class="info-panel">
     <div class="info-panel-text">
-      This is a quick hacky side project modifying a <a target="_blank" href="https://transcranial.github.io/keras-js/">the wonderful Keras.js demos</a> to include 3D visualizations of ouputs for several of the demos. 
+      This is a quick hacky side project modifying a <a target="_blank" href="https://transcranial.github.io/keras-js/">the wonderful Keras.js demos</a> to include 3D visualizations of ouputs for several of the demos. Use mouse to rotate about a pivot, W/S to move forward/back, A/D to move left/right, and Q/E to move up/down.
     </div>
 	<br>
     <div class="info-panel-text" v-if="currentView === 'mnist-cnn'">
